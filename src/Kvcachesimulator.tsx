@@ -27,7 +27,33 @@ interface Step {
     flopsWith: number;
 }
 
-const GEN_WORDS = ['jumps', 'over', 'the', 'lazy', 'dog', 'and', 'runs', 'away'];
+const PRESETS = [
+    {
+        label: '🦊 Classic NLP',
+        prompt: 'The quick brown fox',
+        genTokens: ['jumps', 'over', 'the', 'lazy', 'dog'],
+    },
+    {
+        label: '🤖 LLM Inference',
+        prompt: 'Transformers use attention to',
+        genTokens: ['learn', 'contextual', 'token', 'representations', 'efficiently'],
+    },
+    {
+        label: '🧠 KV Cache Concept',
+        prompt: 'Key value cache stores',
+        genTokens: ['computed', 'vectors', 'to', 'avoid', 'recomputation'],
+    },
+    {
+        label: '🌍 Translation Task',
+        prompt: 'Translate English to French',
+        genTokens: ['Bonjour', 'le', 'monde', 'est', 'beau'],
+    },
+    {
+        label: '💻 Code Generation',
+        prompt: 'def fibonacci function returns',
+        genTokens: ['sum', 'of', 'previous', 'two', 'numbers'],
+    },
+];
 
 function seeded(seed: number) {
     let s = seed;
@@ -42,7 +68,7 @@ function makeKV(token: string, idx: number) {
     };
 }
 
-function simulate(promptTokens: string[], genCount: number): Step[] {
+function simulate(promptTokens: string[], genTokens: string[]): Step[] {
     const steps: Step[] = [];
     const cache: KVEntry[] = [];
     const generated: string[] = [];
@@ -70,8 +96,8 @@ function simulate(promptTokens: string[], genCount: number): Step[] {
         cache.push({ ...entry, isNew: false });
     }
 
-    for (let g = 0; g < genCount; g++) {
-        const token = GEN_WORDS[g % GEN_WORDS.length];
+    for (let g = 0; g < genTokens.length; g++) {
+        const token = genTokens[g];
         const idx = promptTokens.length + g;
         const { key, value } = makeKV(token, idx);
         const entry: KVEntry = { token, index: idx, key, value, phase: 'gen', isNew: true };
@@ -80,7 +106,7 @@ function simulate(promptTokens: string[], genCount: number): Step[] {
         generated.push(token);
         steps.push({
             phase: 'generation',
-            label: `Generate ${g + 1}/${genCount}`,
+            label: `Generate ${g + 1}/${genTokens.length}`,
             activeToken: token,
             activeIndex: idx,
             explanation: `Generation phase: only "${token}" needs new K/V computation. All ${snap.length} previous tokens' vectors are READ from cache — zero recomputation. This is O(n) vs O(n²) without cache.`,
@@ -101,21 +127,20 @@ function simulate(promptTokens: string[], genCount: number): Step[] {
 // ─── COMPONENT ───────────────────────────────────────────────────────────────
 
 export default function KVCacheSimulator() {
-    const [prompt, setPrompt] = useState('The quick brown fox');
-    const [genCount, setGenCount] = useState(5);
+    const [selectedPreset, setSelectedPreset] = useState(0);
     const [steps, setSteps] = useState<Step[]>([]);
     const [idx, setIdx] = useState(0);
 
+    const preset = PRESETS[selectedPreset];
+    const promptTokens = preset.prompt.trim().split(/\s+/).filter(Boolean);
+
     const run = useCallback(() => {
-        const tokens = prompt.trim().split(/\s+/).filter(Boolean);
-        if (!tokens.length) return;
-        const s = simulate(tokens, genCount);
+        const s = simulate(promptTokens, preset.genTokens);
         setSteps(s);
         setIdx(0);
-    }, [prompt, genCount]);
+    }, [selectedPreset]);
 
     const step = steps[idx];
-    const promptTokens = prompt.trim().split(/\s+/).filter(Boolean);
 
     return (
         <div className="app">
@@ -136,28 +161,40 @@ export default function KVCacheSimulator() {
 
             {/* CONFIG */}
             <section className="card config-card">
-                <div className="card-title"><span className="tag">01</span> Configure</div>
+                <div className="card-title"><span className="tag">01</span> Choose a Preset</div>
                 <div className="config-row">
-                    <div className="field">
-                        <label>Prompt Tokens <span className="count">{promptTokens.length} tokens</span></label>
-                        <input
-                            value={prompt}
-                            onChange={e => setPrompt(e.target.value)}
-                            placeholder="Enter prompt text..."
-                            className="text-input"
-                        />
-                        <div className="chips">
-                            {promptTokens.map((t, i) => (
-                                <span key={i} className="chip chip-prompt"><span className="chip-i">{i}</span>{t}</span>
-                            ))}
+                    <div className="presets">
+                        {PRESETS.map((p, i) => (
+                            <button
+                                key={i}
+                                className={`preset-btn ${selectedPreset === i ? 'active' : ''}`}
+                                onClick={() => { setSelectedPreset(i); setSteps([]); }}
+                            >
+                                <span className="preset-label">{p.label}</span>
+                                <span className="preset-prompt">Prompt: "{p.prompt}"</span>
+                                <span className="preset-gen">→ {p.genTokens.join(' · ')}</span>
+                            </button>
+                        ))}
+                    </div>
+                    <div className="preset-summary">
+                        <div className="summary-block">
+                            <span className="summary-title">Prompt Tokens ({promptTokens.length})</span>
+                            <div className="chips">
+                                {promptTokens.map((t, i) => (
+                                    <span key={i} className="chip chip-prompt"><span className="chip-i">{i}</span>{t}</span>
+                                ))}
+                            </div>
                         </div>
+                        <div className="summary-block">
+                            <span className="summary-title">Generation Tokens ({preset.genTokens.length})</span>
+                            <div className="chips">
+                                {preset.genTokens.map((t, i) => (
+                                    <span key={i} className="chip chip-gen">{t}</span>
+                                ))}
+                            </div>
+                        </div>
+                        <button className="run-btn" onClick={run}>⬡ Run Simulation →</button>
                     </div>
-                    <div className="field field-sm">
-                        <label>Generation Steps <span className="count">{genCount}</span></label>
-                        <input type="range" min={1} max={10} value={genCount}
-                               onChange={e => setGenCount(+e.target.value)} className="slider" />
-                    </div>
-                    <button className="run-btn" onClick={run}>⬡ Run Simulation →</button>
                 </div>
             </section>
 
