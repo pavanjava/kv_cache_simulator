@@ -1,7 +1,14 @@
 // App.tsx
 import KVCacheSimulator from './Kvcachesimulator.tsx';
+import {VllmAnalysis} from './vllmDeepDive.tsx'
+
 export default function App() {
-  return <KVCacheSimulator />;
+  return (
+      <>
+        <VllmAnalysis />
+        <KVCacheSimulator />
+      </>
+  );
 }
 
 // main.tsx  (already in your Vite project — just make sure it imports App)
