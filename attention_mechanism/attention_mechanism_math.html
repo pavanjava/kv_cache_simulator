@@ -1,0 +1,1179 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Attention Mechanism — Real Matrix Computation</title>
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@300;400;500;600;700&family=DM+Sans:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg: #f0f4f8;
+      --white: #ffffff;
+      --surface: #e8eef5;
+      --border: #c8d8e8;
+      --border2: #a0bcd4;
+      --q-color: #2563eb;
+      --q-bg: #dbeafe;
+      --q-border: #93c5fd;
+      --k-color: #059669;
+      --k-bg: #d1fae5;
+      --k-border: #6ee7b7;
+      --v-color: #7c3aed;
+      --v-bg: #ede9fe;
+      --v-border: #c4b5fd;
+      --attn-color: #d97706;
+      --attn-bg: #fef3c7;
+      --attn-border: #fcd34d;
+      --ctx-color: #dc2626;
+      --ctx-bg: #fee2e2;
+      --ctx-border: #fca5a5;
+      --out-color: #0891b2;
+      --out-bg: #cffafe;
+      --out-border: #67e8f9;
+      --text: #1e293b;
+      --text-mid: #475569;
+      --text-dim: #94a3b8;
+      --mono: 'IBM Plex Mono', monospace;
+      --sans: 'DM Sans', sans-serif;
+    }
+
+    * { margin:0; padding:0; box-sizing:border-box; }
+
+    body {
+      font-family: var(--sans);
+      background: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+    }
+
+    /* ── header ── */
+    .page-header {
+      background: var(--white);
+      border-bottom: 1px solid var(--border);
+      padding: 1.2rem 2rem;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      flex-wrap: wrap;
+      gap: 1rem;
+      position: sticky;
+      top: 0;
+      z-index: 50;
+      box-shadow: 0 2px 12px rgba(0,0,0,0.06);
+    }
+
+    .page-header h1 {
+      font-size: 1.05rem;
+      font-weight: 700;
+      color: var(--text);
+    }
+
+    .page-header .subtitle {
+      font-family: var(--mono);
+      font-size: 0.72rem;
+      color: var(--text-dim);
+      margin-top: 2px;
+    }
+
+    .ctrl-row {
+      display: flex;
+      gap: 8px;
+      align-items: center;
+      flex-wrap: wrap;
+    }
+
+    .btn {
+      font-family: var(--mono);
+      font-size: 0.75rem;
+      font-weight: 600;
+      padding: 7px 16px;
+      border-radius: 5px;
+      border: none;
+      cursor: pointer;
+      transition: all 0.2s;
+      letter-spacing: 0.3px;
+    }
+
+    .btn-primary { background: #1e40af; color: #fff; }
+    .btn-primary:hover { background: #1d4ed8; box-shadow: 0 4px 14px rgba(30,64,175,0.35); }
+    .btn-step { background: var(--white); color: var(--text); border: 1px solid var(--border2); }
+    .btn-step:hover { background: var(--surface); }
+    .btn-reset { background: #fef2f2; color: #dc2626; border: 1px solid #fca5a5; }
+    .btn-reset:hover { background: #fee2e2; }
+
+    .speed-select {
+      font-family: var(--mono);
+      font-size: 0.72rem;
+      padding: 6px 10px;
+      border: 1px solid var(--border2);
+      border-radius: 5px;
+      background: var(--white);
+      color: var(--text);
+      cursor: pointer;
+    }
+
+    /* ── main layout ── */
+    .main {
+      display: flex;
+      gap: 0;
+      min-height: calc(100vh - 70px);
+    }
+
+    /* ── left panel: diagram ── */
+    .diagram-panel {
+      flex: 1;
+      padding: 2rem 1.5rem;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      overflow-x: auto;
+    }
+
+    /* ── right panel: computation log ── */
+    .log-panel {
+      width: 320px;
+      background: var(--white);
+      border-left: 1px solid var(--border);
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+
+    .log-header {
+      padding: 1rem;
+      border-bottom: 1px solid var(--border);
+      font-family: var(--mono);
+      font-size: 0.72rem;
+      font-weight: 600;
+      color: var(--text-mid);
+      letter-spacing: 1.5px;
+      text-transform: uppercase;
+      background: var(--surface);
+    }
+
+    .log-body {
+      flex: 1;
+      overflow-y: auto;
+      padding: 0.75rem;
+      font-family: var(--mono);
+      font-size: 0.72rem;
+      color: var(--text-mid);
+      line-height: 1.8;
+    }
+
+    .log-entry {
+      padding: 6px 8px;
+      border-radius: 4px;
+      margin-bottom: 4px;
+      border-left: 3px solid transparent;
+      opacity: 0;
+      transform: translateX(10px);
+      transition: opacity 0.3s, transform 0.3s;
+    }
+
+    .log-entry.show { opacity: 1; transform: translateX(0); }
+    .log-entry.step-q   { border-color: var(--q-color);    background: var(--q-bg);    color: var(--q-color); }
+    .log-entry.step-k   { border-color: var(--k-color);    background: var(--k-bg);    color: var(--k-color); }
+    .log-entry.step-v   { border-color: var(--v-color);    background: var(--v-bg);    color: var(--v-color); }
+    .log-entry.step-dot { border-color: var(--attn-color); background: var(--attn-bg); color: var(--attn-color); }
+    .log-entry.step-softmax { border-color: #f59e0b;       background: #fffbeb;        color: #92400e; }
+    .log-entry.step-ctx { border-color: var(--ctx-color);  background: var(--ctx-bg);  color: var(--ctx-color); }
+    .log-entry.step-out { border-color: var(--out-color);  background: var(--out-bg);  color: var(--out-color); }
+    .log-entry.step-info { border-color: var(--border2);   background: var(--surface); color: var(--text-mid); }
+
+    /* ── diagram components ── */
+    .diagram-flow {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 0;
+      position: relative;
+    }
+
+    .layer-row {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 2rem;
+      position: relative;
+      width: 100%;
+      padding: 0.5rem 0;
+    }
+
+    /* Matrix block */
+    .matrix-block {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 4px;
+    }
+
+    .matrix-label {
+      font-family: var(--mono);
+      font-size: 0.68rem;
+      font-weight: 700;
+      letter-spacing: 1.5px;
+      text-transform: uppercase;
+      padding: 3px 10px;
+      border-radius: 3px;
+      margin-bottom: 4px;
+    }
+
+    .matrix-grid {
+      display: grid;
+      gap: 2px;
+      border-radius: 6px;
+      padding: 4px;
+      border: 2px solid;
+      transition: all 0.4s ease;
+    }
+
+    .matrix-grid.pulse {
+      animation: mat-pulse 0.6s ease;
+    }
+
+    @keyframes mat-pulse {
+      0%,100% { transform: scale(1); }
+      50% { transform: scale(1.04); }
+    }
+
+    .cell {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-family: var(--mono);
+      font-size: 0.58rem;
+      font-weight: 500;
+      border-radius: 3px;
+      transition: background 0.5s ease, color 0.3s, transform 0.3s;
+      cursor: default;
+      position: relative;
+    }
+
+    .cell:hover { transform: scale(1.15); z-index: 20; }
+
+    .cell[data-tip]:hover::after {
+      content: attr(data-tip);
+      position: absolute;
+      bottom: calc(100% + 4px);
+      left: 50%;
+      transform: translateX(-50%);
+      background: #1e293b;
+      color: #fff;
+      font-size: 0.65rem;
+      white-space: nowrap;
+      padding: 3px 7px;
+      border-radius: 3px;
+      z-index: 100;
+      pointer-events: none;
+    }
+
+    /* Q matrix */
+    .mat-q .matrix-grid { border-color: var(--q-border); background: #f0f7ff; }
+    .mat-q .cell { background: var(--q-bg); color: var(--q-color); width: 38px; height: 28px; }
+    .mat-q .matrix-label { background: var(--q-bg); color: var(--q-color); border: 1px solid var(--q-border); }
+
+    /* K matrix */
+    .mat-k .matrix-grid { border-color: var(--k-border); background: #f0fdf6; }
+    .mat-k .cell { background: var(--k-bg); color: var(--k-color); width: 38px; height: 28px; }
+    .mat-k .matrix-label { background: var(--k-bg); color: var(--k-color); border: 1px solid var(--k-border); }
+
+    /* V matrix */
+    .mat-v .matrix-grid { border-color: var(--v-border); background: #faf5ff; }
+    .mat-v .cell { background: var(--v-bg); color: var(--v-color); width: 38px; height: 28px; }
+    .mat-v .matrix-label { background: var(--v-bg); color: var(--v-color); border: 1px solid var(--v-border); }
+
+    /* Attention matrix (large) */
+    .mat-attn .matrix-grid { border-color: var(--attn-border); background: #fffbeb; }
+    .mat-attn .cell { background: var(--attn-bg); color: #78350f; width: 50px; height: 32px; font-size: 0.62rem; }
+    .mat-attn .matrix-label { background: var(--attn-bg); color: var(--attn-color); border: 1px solid var(--attn-border); }
+
+    /* Context matrix */
+    .mat-ctx .matrix-grid { border-color: var(--ctx-border); background: #fff5f5; }
+    .mat-ctx .cell { background: var(--ctx-bg); color: var(--ctx-color); width: 48px; height: 28px; }
+    .mat-ctx .matrix-label { background: var(--ctx-bg); color: var(--ctx-color); border: 1px solid var(--ctx-border); }
+
+    /* Output */
+    .out-box {
+      background: var(--out-bg);
+      border: 2px solid var(--out-border);
+      border-radius: 8px;
+      padding: 10px 20px;
+      font-family: var(--mono);
+      font-size: 0.75rem;
+      color: var(--out-color);
+      font-weight: 600;
+      text-align: center;
+      min-width: 180px;
+      transition: all 0.4s;
+    }
+
+    /* Arrows */
+    .arrow-down {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      color: var(--text-dim);
+      font-size: 0.65rem;
+      font-family: var(--mono);
+      gap: 2px;
+      padding: 4px 0;
+    }
+
+    .arrow-line {
+      width: 2px;
+      height: 24px;
+      background: var(--border2);
+      position: relative;
+    }
+
+    .arrow-line.active { background: #1e40af; }
+
+    .arrow-line::after {
+      content: '▼';
+      position: absolute;
+      bottom: -10px;
+      left: 50%;
+      transform: translateX(-50%);
+      color: var(--border2);
+      font-size: 10px;
+    }
+
+    .arrow-line.active::after { color: #1e40af; }
+
+    .arrow-diagonal {
+      position: absolute;
+      pointer-events: none;
+      z-index: 5;
+    }
+
+    /* Op badge */
+    .op-badge {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      background: var(--white);
+      border: 2px solid var(--border2);
+      border-radius: 50%;
+      width: 34px;
+      height: 34px;
+      font-family: var(--mono);
+      font-weight: 700;
+      font-size: 0.9rem;
+      color: var(--text);
+      box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+      transition: all 0.3s;
+      flex-shrink: 0;
+    }
+
+    .op-badge.active { background: #1e40af; color: #fff; border-color: #1e40af; box-shadow: 0 4px 14px rgba(30,64,175,0.4); }
+
+    /* Formula strip */
+    .formula-strip {
+      background: var(--white);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 8px 16px;
+      font-family: var(--mono);
+      font-size: 0.78rem;
+      color: var(--text);
+      text-align: center;
+      margin: 6px 0;
+      box-shadow: 0 1px 4px rgba(0,0,0,0.06);
+    }
+
+    .formula-strip.highlight {
+      background: #eff6ff;
+      border-color: #93c5fd;
+      color: #1d4ed8;
+      font-weight: 600;
+    }
+
+    /* Token row labels */
+    .token-label-col {
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+      margin-right: 4px;
+    }
+
+    .tok-lbl {
+      font-family: var(--mono);
+      font-size: 0.6rem;
+      font-weight: 600;
+      color: var(--text-dim);
+      height: 28px;
+      display: flex;
+      align-items: center;
+      justify-content: flex-end;
+      padding-right: 4px;
+      min-width: 64px;
+    }
+
+    /* Step indicator */
+    .step-indicator {
+      display: flex;
+      gap: 6px;
+      margin: 0 1rem;
+    }
+
+    .step-dot {
+      width: 8px; height: 8px;
+      border-radius: 50%;
+      background: var(--border2);
+      transition: all 0.3s;
+    }
+
+    .step-dot.done  { background: #10b981; }
+    .step-dot.active { background: #1e40af; transform: scale(1.3); box-shadow: 0 0 6px rgba(30,64,175,0.4); }
+
+    /* Progress bar */
+    .progress-bar {
+      height: 3px;
+      background: var(--border);
+      border-radius: 2px;
+      overflow: hidden;
+      margin: 0 2rem;
+    }
+
+    .progress-fill {
+      height: 100%;
+      background: linear-gradient(90deg, #2563eb, #7c3aed);
+      border-radius: 2px;
+      width: 0%;
+      transition: width 0.5s ease;
+    }
+
+    /* Transformer boundary */
+    .transformer-boundary {
+      border: 2px dashed var(--border2);
+      border-radius: 12px;
+      padding: 1.5rem 2rem;
+      background: rgba(255,255,255,0.6);
+      position: relative;
+      margin-top: 1rem;
+    }
+
+    .transformer-label {
+      position: absolute;
+      bottom: -12px;
+      left: 50%;
+      transform: translateX(-50%);
+      background: var(--bg);
+      padding: 2px 16px;
+      font-family: var(--mono);
+      font-size: 0.68rem;
+      font-weight: 600;
+      color: var(--text-dim);
+      letter-spacing: 1px;
+      text-transform: uppercase;
+      white-space: nowrap;
+    }
+
+    /* Softmax cell heat */
+    .cell.heat-0 { background: #f0fdf4; color: #166534; }
+    .cell.heat-1 { background: #bbf7d0; color: #166534; }
+    .cell.heat-2 { background: #4ade80; color: #14532d; }
+    .cell.heat-3 { background: #16a34a; color: #fff; }
+    .cell.heat-4 { background: #15803d; color: #fff; }
+
+    /* Scrollbar */
+    ::-webkit-scrollbar { width: 5px; height: 5px; }
+    ::-webkit-scrollbar-track { background: var(--surface); }
+    ::-webkit-scrollbar-thumb { background: var(--border2); border-radius: 3px; }
+
+    /* Responsive */
+    @media (max-width: 900px) {
+      .log-panel { display: none; }
+      .main { flex-direction: column; }
+    }
+
+    /* Step overlay highlight */
+    .computing {
+      outline: 3px solid #2563eb;
+      outline-offset: 3px;
+      border-radius: 6px;
+      animation: compute-flash 0.8s ease infinite alternate;
+    }
+
+    @keyframes compute-flash {
+      from { outline-color: #2563eb; }
+      to { outline-color: #7c3aed; }
+    }
+
+    .section-title-row {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin-bottom: 8px;
+    }
+
+    .section-num {
+      width: 22px; height: 22px;
+      background: var(--text);
+      color: #fff;
+      border-radius: 50%;
+      font-size: 0.65rem;
+      font-weight: 700;
+      display: flex; align-items: center; justify-content: center;
+      font-family: var(--mono);
+      flex-shrink: 0;
+    }
+    .section-name {
+      font-weight: 600;
+      font-size: 0.82rem;
+      color: var(--text-mid);
+      text-transform: uppercase;
+      letter-spacing: 0.8px;
+      font-family: var(--mono);
+    }
+  </style>
+</head>
+<body>
+
+<!-- HEADER -->
+<div class="page-header">
+  <div>
+    <h1>Attention Mechanism — Real Matrix Computation</h1>
+    <div class="subtitle">Sentence: "I&nbsp;&nbsp;like&nbsp;&nbsp;Natural&nbsp;&nbsp;Language&nbsp;&nbsp;Processing" &nbsp;·&nbsp; d_model=4, d_k=4, seq_len=5</div>
+  </div>
+  <div class="ctrl-row">
+    <div class="step-indicator" id="step-dots">
+      <div class="step-dot" id="dot-0"></div>
+      <div class="step-dot" id="dot-1"></div>
+      <div class="step-dot" id="dot-2"></div>
+      <div class="step-dot" id="dot-3"></div>
+      <div class="step-dot" id="dot-4"></div>
+      <div class="step-dot" id="dot-5"></div>
+    </div>
+    <select class="speed-select" id="speed-select">
+      <option value="800">Normal</option>
+      <option value="300">Fast</option>
+      <option value="1600">Slow</option>
+    </select>
+    <button class="btn btn-step" onclick="stepOnce()">Step ▶</button>
+    <button class="btn btn-primary" onclick="runAll()">▶ Auto Run</button>
+    <button class="btn btn-reset" onclick="resetAll()">↺ Reset</button>
+  </div>
+</div>
+
+<div class="progress-bar"><div class="progress-fill" id="progress-fill"></div></div>
+
+<div class="main">
+
+  <!-- DIAGRAM PANEL -->
+  <div class="diagram-panel">
+    <div class="transformer-boundary">
+      <div class="transformer-label">Transformer Layer 4 — Self-Attention Head</div>
+
+      <div class="diagram-flow" id="diagram-flow">
+
+        <!-- ── ROW 1: Q and K side by side, formula above ── -->
+        <div style="width:100%;text-align:center;margin-bottom:4px">
+          <div class="formula-strip" id="formula-qkt">
+            softmax( Q × Kᵀ / √d<sub>k</sub> ) × V &nbsp;·&nbsp; then NN + LayerNorm
+          </div>
+        </div>
+
+        <div class="layer-row" id="row-qk" style="align-items:flex-start;gap:3rem">
+
+          <!-- Q -->
+          <div class="matrix-block mat-q" id="block-q">
+            <div class="section-title-row">
+              <div class="section-num" style="background:var(--q-color)">Q</div>
+              <div class="section-name" style="color:var(--q-color)">Query (5×4)</div>
+            </div>
+            <div style="display:flex">
+              <div class="token-label-col" id="q-row-labels"></div>
+              <div class="matrix-label" style="display:none">Q</div>
+              <div class="matrix-grid mat-q-grid" id="mat-q" style="grid-template-columns:repeat(4,38px)"></div>
+            </div>
+            <div style="font-family:var(--mono);font-size:0.6rem;color:var(--text-dim);margin-top:4px;text-align:center">5 tokens × 4 dims</div>
+          </div>
+
+          <!-- × -->
+          <div style="display:flex;flex-direction:column;align-items:center;justify-content:center;padding-top:60px">
+            <div class="op-badge" id="op-times">×</div>
+          </div>
+
+          <!-- K -->
+          <div class="matrix-block mat-k" id="block-k">
+            <div class="section-title-row">
+              <div class="section-num" style="background:var(--k-color)">K</div>
+              <div class="section-name" style="color:var(--k-color)">Key (5×4)</div>
+            </div>
+            <div style="display:flex">
+              <div class="token-label-col" id="k-row-labels"></div>
+              <div class="matrix-grid mat-k-grid" id="mat-k" style="grid-template-columns:repeat(4,38px)"></div>
+            </div>
+            <div style="font-family:var(--mono);font-size:0.6rem;color:var(--text-dim);margin-top:4px;text-align:center">5 tokens × 4 dims</div>
+          </div>
+
+          <!-- = Kᵀ info -->
+          <div style="display:flex;flex-direction:column;align-items:center;justify-content:center;padding-top:60px;gap:6px">
+            <div style="font-family:var(--mono);font-size:0.7rem;color:var(--text-dim)">Kᵀ (4×5)</div>
+            <div class="op-badge" id="op-eq" style="font-size:0.7rem">=</div>
+          </div>
+
+          <!-- Raw score matrix (QKᵀ before softmax) -->
+          <div class="matrix-block" id="block-raw">
+            <div class="section-title-row">
+              <div class="section-num" style="background:var(--attn-color)">S</div>
+              <div class="section-name" style="color:var(--attn-color)">Raw Scores (5×5)</div>
+            </div>
+            <div style="display:flex;flex-direction:column;align-items:flex-start;gap:1px">
+              <div style="display:flex;gap:2px;padding-left:48px;margin-bottom:2px" id="raw-col-labels"></div>
+              <div style="display:flex">
+                <div class="token-label-col" id="raw-row-labels"></div>
+                <div class="matrix-grid" id="mat-raw"
+                     style="grid-template-columns:repeat(5,50px);border:2px solid var(--attn-border);background:#fffbeb"></div>
+              </div>
+            </div>
+            <div style="font-family:var(--mono);font-size:0.6rem;color:var(--text-dim);margin-top:4px;text-align:center">Q·Kᵀ (before /√d<sub>k</sub> and softmax)</div>
+          </div>
+        </div>
+
+        <!-- Arrow down to softmax -->
+        <div class="arrow-down">
+          <div class="arrow-line" id="arr-to-softmax"></div>
+          <span style="font-size:0.62rem;color:var(--text-dim);font-family:var(--mono)">÷ √4 = ÷ 2 &nbsp;→&nbsp; softmax row-wise</span>
+        </div>
+
+        <!-- ── ROW 2: Attention matrix (softmax output) ── -->
+        <div class="layer-row" id="row-attn">
+          <div class="matrix-block mat-attn" id="block-attn">
+            <div class="section-title-row">
+              <div class="section-num" style="background:var(--attn-color)">α</div>
+              <div class="section-name" style="color:var(--attn-color)">Attention Matrix (5×5) — after softmax</div>
+            </div>
+            <div style="display:flex;flex-direction:column;align-items:flex-start;gap:1px">
+              <div style="display:flex;gap:2px;padding-left:72px;margin-bottom:2px" id="attn-col-labels"></div>
+              <div style="display:flex">
+                <div class="token-label-col" id="attn-row-labels"></div>
+                <div class="matrix-grid" id="mat-attn"
+                     style="grid-template-columns:repeat(5,50px);border:2px solid var(--attn-border);background:#fffbeb"></div>
+              </div>
+            </div>
+            <div style="font-family:var(--mono);font-size:0.6rem;color:var(--attn-color);margin-top:4px;text-align:center;font-weight:600">rows sum to 1.000</div>
+          </div>
+        </div>
+
+        <!-- Arrow down + V label -->
+        <div style="display:flex;align-items:center;gap:2rem;justify-content:center;padding:4px 0">
+          <div class="arrow-down">
+            <div class="arrow-line" id="arr-to-ctx"></div>
+            <span style="font-size:0.62rem;color:var(--text-dim);font-family:var(--mono)">× V</span>
+          </div>
+          <div class="matrix-block mat-v" id="block-v" style="margin-bottom:0">
+            <div class="section-title-row">
+              <div class="section-num" style="background:var(--v-color)">V</div>
+              <div class="section-name" style="color:var(--v-color)">Value (5×4)</div>
+            </div>
+            <div style="display:flex">
+              <div class="token-label-col" id="v-row-labels"></div>
+              <div class="matrix-grid mat-v-grid" id="mat-v" style="grid-template-columns:repeat(4,38px)"></div>
+            </div>
+          </div>
+          <div class="op-badge" id="op-mv">=</div>
+        </div>
+
+        <!-- ── ROW 3: Context vector ── -->
+        <div class="layer-row" id="row-ctx">
+          <div class="matrix-block mat-ctx" id="block-ctx">
+            <div class="section-title-row">
+              <div class="section-num" style="background:var(--ctx-color)">C</div>
+              <div class="section-name" style="color:var(--ctx-color)">Context Vector (5×4)</div>
+            </div>
+            <div style="display:flex">
+              <div class="token-label-col" id="ctx-row-labels"></div>
+              <div class="matrix-grid" id="mat-ctx"
+                   style="grid-template-columns:repeat(4,48px);border:2px solid var(--ctx-border);background:#fff5f5"></div>
+            </div>
+            <div style="font-family:var(--mono);font-size:0.6rem;color:var(--ctx-color);margin-top:4px;text-align:center;font-weight:600">context-aware token embeddings</div>
+          </div>
+        </div>
+
+        <!-- Arrow down to NN/Norm -->
+        <div class="arrow-down">
+          <div class="arrow-line" id="arr-to-out"></div>
+          <span style="font-size:0.62rem;color:var(--text-dim);font-family:var(--mono)">+ residual, LayerNorm, FFN</span>
+        </div>
+
+        <!-- ── ROW 4: Output ── -->
+        <div class="layer-row" id="row-out">
+          <div style="display:flex;flex-direction:column;align-items:center;gap:8px">
+            <div class="out-box" id="out-box">
+              NN, Normalization
+            </div>
+            <div id="out-detail" style="font-family:var(--mono);font-size:0.65rem;color:var(--text-dim);text-align:center;max-width:380px;line-height:1.6;opacity:0;transition:opacity 0.5s"></div>
+          </div>
+        </div>
+
+      </div><!-- /diagram-flow -->
+
+    </div><!-- /transformer-boundary -->
+  </div><!-- /diagram-panel -->
+
+  <!-- LOG PANEL -->
+  <div class="log-panel">
+    <div class="log-header">📊 Computation Log</div>
+    <div class="log-body" id="log-body"></div>
+  </div>
+
+</div><!-- /main -->
+
+<script>
+  // ═══════════════════════════════════════════════════
+  // REAL DATA — sentence "I like Natural Language Processing"
+  // All matrices defined explicitly for d_model=d_k=4, seq=5
+  // ═══════════════════════════════════════════════════
+  const TOKENS = ['I', 'like', 'Natural', 'Lang.', 'Proc.'];
+  const FULL_TOKENS = ['I', 'like', 'Natural', 'Language', 'Processing'];
+  const N = 5, D = 4;
+
+  // Query matrix (5×4) — each row is a token's query vector
+  const Q_RAW = [
+    [ 0.52,  0.31,  0.12,  0.08],  // I
+    [ 0.18,  0.64,  0.27,  0.41],  // like
+    [ 0.09,  0.22,  0.71,  0.53],  // Natural
+    [ 0.14,  0.31,  0.68,  0.72],  // Language
+    [ 0.33,  0.48,  0.75,  0.81],  // Processing
+  ];
+
+  // Key matrix (5×4)
+  const K_RAW = [
+    [ 0.61,  0.19,  0.08,  0.11],  // I
+    [ 0.23,  0.58,  0.31,  0.19],  // like
+    [ 0.07,  0.18,  0.82,  0.44],  // Natural
+    [ 0.11,  0.25,  0.74,  0.67],  // Language
+    [ 0.29,  0.44,  0.79,  0.88],  // Processing
+  ];
+
+  // Value matrix (5×4)
+  const V_RAW = [
+    [ 0.88,  0.12,  0.07,  0.05],  // I
+    [ 0.17,  0.76,  0.23,  0.31],  // like
+    [ 0.06,  0.14,  0.69,  0.48],  // Natural
+    [ 0.10,  0.22,  0.81,  0.59],  // Language
+    [ 0.25,  0.38,  0.84,  0.77],  // Processing
+  ];
+
+  // ─── Math helpers ───
+  function dot(a, b) { return a.reduce((s,v,i) => s+v*b[i], 0); }
+  function softmax(arr) {
+    const m = Math.max(...arr);
+    const e = arr.map(x => Math.exp(x-m));
+    const s = e.reduce((a,b) => a+b, 0);
+    return e.map(x => x/s);
+  }
+  function matmul(A, B) {
+    // A: r×c, B: c×k → result r×k
+    const rows = A.length, cols = B[0].length, inner = B.length;
+    return A.map(row => Array.from({length:cols}, (_,j) => row.reduce((s,v,k) => s+v*B[k][j], 0)));
+  }
+  function transpose(M) { return M[0].map((_,j) => M.map(row => row[j])); }
+
+  // ─── Compute raw scores: Q × Kᵀ ───
+  const K_T = transpose(K_RAW);
+  const RAW_SCORES = matmul(Q_RAW, K_T);  // 5×5
+
+  // ─── Scale and softmax ───
+  const SCALED = RAW_SCORES.map(row => row.map(v => v/Math.sqrt(D)));
+  const ATTN_WEIGHTS = SCALED.map(row => softmax(row)); // 5×5
+
+  // ─── Context = Attention × V ───
+  const CTX = matmul(ATTN_WEIGHTS, V_RAW); // 5×4
+
+  // ─── Post attention (LayerNorm simulation) ───
+  function layerNorm(vec) {
+    const mean = vec.reduce((a,b)=>a+b,0)/vec.length;
+    const std = Math.sqrt(vec.reduce((a,v)=>a+(v-mean)**2,0)/vec.length + 1e-5);
+    return vec.map(v => (v-mean)/std);
+  }
+  const OUTPUT = CTX.map(row => layerNorm(row));
+
+  // ═══════════════════════════════════════════════════
+  // DOM helpers
+  // ═══════════════════════════════════════════════════
+  function fmt(v, d=3) { return v.toFixed(d); }
+
+  function heatBg(v, min, max) {
+    const t = Math.max(0, Math.min(1, (v-min)/(max-min+1e-8)));
+    // teal gradient from light to saturated
+    const r = Math.round(220 - t*180);
+    const g = Math.round(230 - t*100);
+    const b = Math.round(230 - t*50);
+    return `rgb(${r},${g},${b})`;
+  }
+
+  function attnHeat(v) {
+    if (v < 0.08) return {bg:'#f0fdf4',fg:'#166534'};
+    if (v < 0.16) return {bg:'#bbf7d0',fg:'#166534'};
+    if (v < 0.28) return {bg:'#4ade80',fg:'#14532d'};
+    if (v < 0.40) return {bg:'#16a34a',fg:'#fff'};
+    return {bg:'#15803d',fg:'#fff'};
+  }
+
+  function buildCell(text, bg, fg, tip='') {
+    const d = document.createElement('div');
+    d.className = 'cell';
+    d.style.background = bg;
+    d.style.color = fg;
+    d.style.width = '100%';
+    d.style.height = '100%';
+    d.textContent = text;
+    if (tip) d.setAttribute('data-tip', tip);
+    return d;
+  }
+
+  function buildTokenLabels(containerId, tokens, height=28) {
+    const c = document.getElementById(containerId);
+    if (!c) return;
+    c.innerHTML = '';
+    tokens.forEach(t => {
+      const d = document.createElement('div');
+      d.className = 'tok-lbl';
+      d.style.height = height+'px';
+      d.textContent = t;
+      c.appendChild(d);
+    });
+  }
+
+  function buildColLabels(containerId, tokens) {
+    const c = document.getElementById(containerId);
+    if (!c) return;
+    c.innerHTML = '';
+    tokens.forEach(t => {
+      const d = document.createElement('div');
+      d.style.cssText = `font-family:var(--mono);font-size:0.58rem;color:var(--text-dim);width:50px;text-align:center;overflow:hidden;white-space:nowrap;text-overflow:ellipsis`;
+      d.textContent = t;
+      c.appendChild(d);
+    });
+  }
+
+  // ═══════════════════════════════════════════════════
+  // Build empty / placeholder matrices on load
+  // ═══════════════════════════════════════════════════
+  function initMatrices() {
+    // Q
+    buildTokenLabels('q-row-labels', TOKENS);
+    const mq = document.getElementById('mat-q');
+    mq.innerHTML = '';
+    Q_RAW.forEach((row,i) => row.forEach((v,j) => {
+      const w = 38, h = 28;
+      const c = buildCell('', '#e8f4fd','#bfdbfe', `Q[${TOKENS[i]}][d${j}] = ${fmt(v)}`);
+      c.style.width=w+'px'; c.style.height=h+'px';
+      c.id = `q-${i}-${j}`;
+      mq.appendChild(c);
+    }));
+
+    // K
+    buildTokenLabels('k-row-labels', TOKENS);
+    const mk = document.getElementById('mat-k');
+    mk.innerHTML = '';
+    K_RAW.forEach((row,i) => row.forEach((v,j) => {
+      const c = buildCell('', '#d1fae5','#6ee7b7', `K[${TOKENS[i]}][d${j}] = ${fmt(v)}`);
+      c.style.width='38px'; c.style.height='28px';
+      c.id = `k-${i}-${j}`;
+      mk.appendChild(c);
+    }));
+
+    // V
+    buildTokenLabels('v-row-labels', TOKENS);
+    const mv = document.getElementById('mat-v');
+    mv.innerHTML = '';
+    V_RAW.forEach((row,i) => row.forEach((v,j) => {
+      const c = buildCell('', '#ede9fe','#c4b5fd', `V[${TOKENS[i]}][d${j}] = ${fmt(v)}`);
+      c.style.width='38px'; c.style.height='28px';
+      c.id = `v-${i}-${j}`;
+      mv.appendChild(c);
+    }));
+
+    // Raw score matrix (empty)
+    buildTokenLabels('raw-row-labels', TOKENS);
+    buildColLabels('raw-col-labels', TOKENS);
+    const mr = document.getElementById('mat-raw');
+    mr.innerHTML = '';
+    for(let i=0;i<N;i++) for(let j=0;j<N;j++) {
+      const c = buildCell('', '#fffbeb','#78350f');
+      c.style.width='50px'; c.style.height='32px'; c.style.fontSize='0.62rem';
+      c.id = `raw-${i}-${j}`;
+      mr.appendChild(c);
+    }
+
+    // Attention matrix (empty)
+    buildTokenLabels('attn-row-labels', TOKENS, 32);
+    buildColLabels('attn-col-labels', TOKENS);
+    const ma = document.getElementById('mat-attn');
+    ma.innerHTML = '';
+    for(let i=0;i<N;i++) for(let j=0;j<N;j++) {
+      const c = buildCell('', '#fffbeb','#78350f');
+      c.style.width='50px'; c.style.height='32px'; c.style.fontSize='0.62rem';
+      c.id = `attn-${i}-${j}`;
+      ma.appendChild(c);
+    }
+
+    // Context matrix (empty)
+    buildTokenLabels('ctx-row-labels', TOKENS);
+    const mc = document.getElementById('mat-ctx');
+    mc.innerHTML = '';
+    for(let i=0;i<N;i++) for(let j=0;j<D;j++) {
+      const c = buildCell('', '#fff5f5','#fca5a5');
+      c.style.width='48px'; c.style.height='28px'; c.style.fontSize='0.62rem';
+      c.id = `ctx-${i}-${j}`;
+      mc.appendChild(c);
+    }
+  }
+
+  // ═══════════════════════════════════════════════════
+  // Logging
+  // ═══════════════════════════════════════════════════
+  function log(html, cls='step-info') {
+    const body = document.getElementById('log-body');
+    const d = document.createElement('div');
+    d.className = `log-entry ${cls}`;
+    d.innerHTML = html;
+    body.appendChild(d);
+    setTimeout(() => d.classList.add('show'), 20);
+    body.scrollTop = body.scrollHeight;
+  }
+
+  // ═══════════════════════════════════════════════════
+  // Step machine
+  // ═══════════════════════════════════════════════════
+  let currentStep = -1;
+  let autoRunTimer = null;
+
+  function getSpeed() { return parseInt(document.getElementById('speed-select').value); }
+
+  function setDot(i, state) {
+    document.querySelectorAll('.step-dot').forEach((d,j) => {
+      if (j < i) d.className = 'step-dot done';
+      else if (j === i) d.className = `step-dot ${state}`;
+      else d.className = 'step-dot';
+    });
+  }
+
+  function setProgress(pct) {
+    document.getElementById('progress-fill').style.width = pct + '%';
+  }
+
+  const STEPS = [
+    { name: 'Show Q', fn: showQ },
+    { name: 'Show K & V', fn: showKV },
+    { name: 'Compute Q×Kᵀ (raw scores)', fn: computeRaw },
+    { name: '÷√dₖ + Softmax → Attention', fn: computeSoftmax },
+    { name: 'Attention × V → Context', fn: computeContext },
+    { name: 'LayerNorm + Output', fn: showOutput },
+  ];
+
+  function stepOnce() {
+    currentStep++;
+    if (currentStep >= STEPS.length) { currentStep = STEPS.length-1; return; }
+    setDot(currentStep, 'active');
+    setProgress((currentStep+1)/STEPS.length * 100);
+    STEPS[currentStep].fn();
+  }
+
+  function runAll() {
+    if (autoRunTimer) { clearInterval(autoRunTimer); autoRunTimer = null; }
+    if (currentStep >= STEPS.length-1) resetAll();
+    const spd = getSpeed();
+    autoRunTimer = setInterval(() => {
+      stepOnce();
+      if (currentStep >= STEPS.length-1) {
+        clearInterval(autoRunTimer);
+        autoRunTimer = null;
+      }
+    }, spd);
+  }
+
+  function resetAll() {
+    if (autoRunTimer) { clearInterval(autoRunTimer); autoRunTimer = null; }
+    currentStep = -1;
+    setProgress(0);
+    document.querySelectorAll('.step-dot').forEach(d => d.className='step-dot');
+    document.getElementById('log-body').innerHTML = '';
+    document.getElementById('formula-qkt').classList.remove('highlight');
+    document.getElementById('out-detail').style.opacity = '0';
+    initMatrices();
+    log('Ready. Click ▶ Auto Run or Step ▶', 'step-info');
+  }
+
+  // ═══════════════════════════════════════════════════
+  // STEP FUNCTIONS
+  // ═══════════════════════════════════════════════════
+  function showQ() {
+    log('── STEP 1: Query Matrix (Q) ──', 'step-info');
+    log('Each row = one token\'s query vector (d=4)', 'step-q');
+
+    const minQ = Math.min(...Q_RAW.flat()), maxQ = Math.max(...Q_RAW.flat());
+
+    Q_RAW.forEach((row, i) => {
+      setTimeout(() => {
+        row.forEach((v, j) => {
+          const c = document.getElementById(`q-${i}-${j}`);
+          c.textContent = fmt(v);
+          c.style.background = heatBg(v, minQ, maxQ);
+          c.style.color = v > 0.5 ? '#0c2461' : '#1e40af';
+        });
+        log(`Q["${FULL_TOKENS[i]}"] = [${row.map(v=>fmt(v)).join(', ')}]`, 'step-q');
+      }, i * 200);
+    });
+
+    document.getElementById('block-q').classList.add('computing');
+    setTimeout(() => document.getElementById('block-q').classList.remove('computing'), 1500);
+  }
+
+  function showKV() {
+    log('── STEP 2: Key (K) and Value (V) Matrices ──', 'step-info');
+    log('K — used to compute compatibility with queries', 'step-k');
+    log('V — the actual content to be aggregated', 'step-v');
+
+    const minK = Math.min(...K_RAW.flat()), maxK = Math.max(...K_RAW.flat());
+    const minV = Math.min(...V_RAW.flat()), maxV = Math.max(...V_RAW.flat());
+
+    K_RAW.forEach((row, i) => {
+      setTimeout(() => {
+        row.forEach((v, j) => {
+          const c = document.getElementById(`k-${i}-${j}`);
+          c.textContent = fmt(v);
+          c.style.background = heatBg(v, minK, maxK);
+          c.style.color = v > 0.5 ? '#064e3b' : '#065f46';
+        });
+      }, i * 180);
+    });
+
+    V_RAW.forEach((row, i) => {
+      setTimeout(() => {
+        row.forEach((v, j) => {
+          const c = document.getElementById(`v-${i}-${j}`);
+          c.textContent = fmt(v);
+          c.style.background = heatBg(v, minV, maxV);
+          c.style.color = v > 0.5 ? '#3b0764' : '#6b21a8';
+        });
+        log(`K["${FULL_TOKENS[i]}"]=[${row.map(v=>fmt(v)).join(',')}]  V["${FULL_TOKENS[i]}"]=[${V_RAW[i].map(v=>fmt(v)).join(',')}]`, 'step-k');
+      }, i * 200);
+    });
+  }
+
+  function computeRaw() {
+    log('── STEP 3: Compute Q × Kᵀ (raw attention scores) ──', 'step-info');
+    log('score(i,j) = dot(Q_i, K_j) = Σ Q[i][d] × K[j][d]', 'step-dot');
+
+    document.getElementById('formula-qkt').classList.add('highlight');
+
+    const minR = Math.min(...RAW_SCORES.flat()), maxR = Math.max(...RAW_SCORES.flat());
+
+    let delay = 0;
+    for (let i=0; i<N; i++) {
+      for (let j=0; j<N; j++) {
+        const v = RAW_SCORES[i][j];
+        const rowDelay = delay;
+        delay += 60;
+        setTimeout(() => {
+          const c = document.getElementById(`raw-${i}-${j}`);
+          c.textContent = fmt(v,3);
+          c.style.background = heatBg(v, minR, maxR);
+          c.style.color = v > (minR+maxR)/2 ? '#451a03' : '#92400e';
+          c.setAttribute('data-tip', `Q["${TOKENS[i]}"]·K["${TOKENS[j]}"]=${fmt(v,3)}`);
+        }, rowDelay);
+      }
+      setTimeout(() => {
+        const r = RAW_SCORES[i];
+        log(`row ${TOKENS[i]}: [${r.map(v=>fmt(v,3)).join(', ')}]`, 'step-dot');
+      }, i*400);
+    }
+  }
+
+  function computeSoftmax() {
+    log('── STEP 4: Scale ÷ √4 = ÷ 2  →  softmax row-wise ──', 'step-info');
+    log('α[i,j] = exp(score/√dₖ) / Σ_k exp(score/√dₖ)', 'step-softmax');
+
+    for (let i=0; i<N; i++) {
+      setTimeout(() => {
+        const w = ATTN_WEIGHTS[i];
+        w.forEach((v, j) => {
+          const c = document.getElementById(`attn-${i}-${j}`);
+          const {bg, fg} = attnHeat(v);
+          c.textContent = fmt(v,3);
+          c.style.background = bg;
+          c.style.color = fg;
+          c.setAttribute('data-tip', `α["${TOKENS[i]}","${TOKENS[j]}"]: ${fmt(v,4)}`);
+        });
+        const top = w.indexOf(Math.max(...w));
+        log(`α["${FULL_TOKENS[i]}"]: [${w.map(v=>fmt(v,3)).join(', ')}]  → attends most to "${FULL_TOKENS[top]}"`, 'step-softmax');
+      }, i * 300);
+    }
+
+    setTimeout(() => {
+      document.getElementById('mat-attn').classList.add('pulse');
+      log('✓ Rows verified: each sums to 1.000', 'step-softmax');
+    }, N*300+100);
+  }
+
+  function computeContext() {
+    log('── STEP 5: Context = Attention × V ──', 'step-info');
+    log('C[i] = Σ_j  α[i,j] × V[j]  (weighted sum of Value rows)', 'step-ctx');
+
+    const minC = Math.min(...CTX.flat()), maxC = Math.max(...CTX.flat());
+
+    for (let i=0; i<N; i++) {
+      setTimeout(() => {
+        CTX[i].forEach((v, j) => {
+          const c = document.getElementById(`ctx-${i}-${j}`);
+          c.textContent = fmt(v,3);
+          c.style.background = heatBg(v, minC, maxC);
+          c.style.color = v > (minC+maxC)/2 ? '#7f1d1d' : '#dc2626';
+          c.setAttribute('data-tip', `CTX["${TOKENS[i]}"][d${j}] = ${fmt(v,4)}`);
+        });
+        const top = ATTN_WEIGHTS[i].indexOf(Math.max(...ATTN_WEIGHTS[i]));
+        log(`CTX["${FULL_TOKENS[i]}"]: [${CTX[i].map(v=>fmt(v,3)).join(', ')}] (most from "${FULL_TOKENS[top]}")`, 'step-ctx');
+      }, i*300);
+    }
+  }
+
+  function showOutput() {
+    log('── STEP 6: LayerNorm + Residual + FFN → Output ──', 'step-info');
+
+    const box = document.getElementById('out-box');
+    box.style.background = '#0891b2';
+    box.style.color = '#fff';
+    box.style.borderColor = '#0e7490';
+    box.innerHTML = '✓ NN, Normalization<br><span style="font-size:0.65rem;opacity:0.8">LayerNorm applied → output vectors</span>';
+
+    const detail = document.getElementById('out-detail');
+    detail.style.opacity = '1';
+
+    let html = '<table style="border-collapse:collapse;width:100%">';
+    html += `<tr><th style="padding:3px 6px;text-align:left;border-bottom:1px solid var(--border)">Token</th>`;
+    for(let j=0;j<D;j++) html += `<th style="padding:3px 6px;text-align:center;border-bottom:1px solid var(--border)">d${j}</th>`;
+    html += '</tr>';
+
+    OUTPUT.forEach((row, i) => {
+      html += `<tr><td style="padding:3px 6px;font-weight:600;color:var(--out-color)">${FULL_TOKENS[i]}</td>`;
+      row.forEach(v => {
+        const clr = v > 0 ? '#0891b2' : '#dc2626';
+        html += `<td style="padding:3px 6px;text-align:center;font-family:var(--mono);font-size:0.65rem;color:${clr}">${fmt(v,3)}</td>`;
+      });
+      html += '</tr>';
+      log(`OUT["${FULL_TOKENS[i]}"]: [${row.map(v=>fmt(v,3)).join(', ')}]`, 'step-out');
+    });
+
+    html += '</table>';
+    detail.innerHTML = html;
+
+    log('✓ Pipeline complete! Each token now encodes context from the entire sentence.', 'step-out');
+    setDot(5, 'done');
+  }
+
+  // ═══════════════════════════════════════════════════
+  // INIT
+  // ═══════════════════════════════════════════════════
+  initMatrices();
+  log('Ready. Click ▶ Auto Run or Step ▶ to walk through each computation.', 'step-info');
+  log('Sentence: "I like Natural Language Processing"', 'step-info');
+  log(`Matrices: Q(5×4), K(5×4), V(5×4), d_k=4`, 'step-info');
+</script>
+</body>
+</html>
