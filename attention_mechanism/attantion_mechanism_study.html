@@ -1,0 +1,1301 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Attention Mechanism Explained</title>
+    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;600;700&family=Syne:wght@400;600;700;800&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg: #0a0e1a;
+            --surface: #111827;
+            --surface2: #1a2235;
+            --border: #1e3a5f;
+            --accent: #00d4ff;
+            --accent2: #ff6b35;
+            --accent3: #a855f7;
+            --green: #10b981;
+            --yellow: #f59e0b;
+            --text: #e2e8f0;
+            --text-dim: #64748b;
+            --text-mid: #94a3b8;
+            --glow: 0 0 20px rgba(0,212,255,0.3);
+            --glow2: 0 0 20px rgba(255,107,53,0.3);
+        }
+
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+
+        body {
+            background: var(--bg);
+            color: var(--text);
+            font-family: 'Syne', sans-serif;
+            min-height: 100vh;
+            overflow-x: hidden;
+        }
+
+        /* Animated grid background */
+        body::before {
+            content: '';
+            position: fixed;
+            inset: 0;
+            background-image:
+                    linear-gradient(rgba(0,212,255,0.03) 1px, transparent 1px),
+                    linear-gradient(90deg, rgba(0,212,255,0.03) 1px, transparent 1px);
+            background-size: 50px 50px;
+            pointer-events: none;
+            z-index: 0;
+        }
+
+        .container {
+            max-width: 1100px;
+            margin: 0 auto;
+            padding: 0 2rem;
+            position: relative;
+            z-index: 1;
+        }
+
+        /* Header */
+        header {
+            padding: 4rem 0 2rem;
+            text-align: center;
+        }
+
+        .badge {
+            display: inline-block;
+            background: rgba(0,212,255,0.1);
+            border: 1px solid rgba(0,212,255,0.3);
+            color: var(--accent);
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.7rem;
+            letter-spacing: 3px;
+            text-transform: uppercase;
+            padding: 6px 16px;
+            border-radius: 2px;
+            margin-bottom: 1.5rem;
+        }
+
+        h1 {
+            font-size: clamp(2.5rem, 6vw, 4.5rem);
+            font-weight: 800;
+            line-height: 1.05;
+            letter-spacing: -2px;
+            background: linear-gradient(135deg, #fff 0%, var(--accent) 50%, var(--accent3) 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            margin-bottom: 1rem;
+        }
+
+        .subtitle {
+            color: var(--text-mid);
+            font-size: 1.1rem;
+            max-width: 600px;
+            margin: 0 auto;
+            line-height: 1.6;
+            font-weight: 400;
+        }
+
+        /* Section styles */
+        .section {
+            margin: 3rem 0;
+            opacity: 0;
+            transform: translateY(30px);
+            transition: opacity 0.7s ease, transform 0.7s ease;
+        }
+
+        .section.visible {
+            opacity: 1;
+            transform: translateY(0);
+        }
+
+        .section-header {
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+            margin-bottom: 1.5rem;
+        }
+
+        .step-num {
+            width: 36px;
+            height: 36px;
+            border-radius: 50%;
+            background: linear-gradient(135deg, var(--accent), var(--accent3));
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-family: 'JetBrains Mono', monospace;
+            font-weight: 700;
+            font-size: 0.85rem;
+            flex-shrink: 0;
+            box-shadow: var(--glow);
+        }
+
+        .section-title {
+            font-size: 1.4rem;
+            font-weight: 700;
+            color: var(--text);
+        }
+
+        .card {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            padding: 2rem;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .card::before {
+            content: '';
+            position: absolute;
+            top: 0; left: 0; right: 0;
+            height: 1px;
+            background: linear-gradient(90deg, transparent, var(--accent), transparent);
+            opacity: 0.5;
+        }
+
+        .prose {
+            color: var(--text-mid);
+            line-height: 1.75;
+            font-size: 0.95rem;
+            margin-bottom: 1rem;
+        }
+
+        .prose strong { color: var(--accent); }
+
+        /* Token display */
+        .tokens-row {
+            display: flex;
+            gap: 10px;
+            flex-wrap: wrap;
+            justify-content: center;
+            margin: 1.5rem 0;
+        }
+
+        .token {
+            background: var(--surface2);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            padding: 10px 18px;
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.9rem;
+            font-weight: 600;
+            color: var(--text);
+            cursor: pointer;
+            transition: all 0.3s ease;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .token:hover {
+            border-color: var(--accent);
+            box-shadow: var(--glow);
+            transform: translateY(-2px);
+        }
+
+        .token.query-token {
+            border-color: var(--accent2);
+            box-shadow: 0 0 12px rgba(255,107,53,0.3);
+            background: rgba(255,107,53,0.08);
+            color: var(--accent2);
+        }
+
+        .token.active {
+            border-color: var(--accent);
+            box-shadow: var(--glow);
+            background: rgba(0,212,255,0.08);
+            animation: pulse-token 1.5s infinite;
+        }
+
+        @keyframes pulse-token {
+            0%, 100% { box-shadow: 0 0 8px rgba(0,212,255,0.3); }
+            50% { box-shadow: 0 0 20px rgba(0,212,255,0.6); }
+        }
+
+        .token-idx {
+            display: block;
+            font-size: 0.6rem;
+            color: var(--text-dim);
+            text-align: center;
+            margin-top: 3px;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+
+        /* QKV matrix visualization */
+        .qkv-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr 1fr;
+            gap: 1rem;
+            margin: 1.5rem 0;
+        }
+
+        .qkv-col {
+            background: var(--surface2);
+            border-radius: 10px;
+            padding: 1rem;
+            border: 1px solid var(--border);
+        }
+
+        .qkv-label {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.75rem;
+            letter-spacing: 2px;
+            text-transform: uppercase;
+            padding: 4px 10px;
+            border-radius: 4px;
+            display: inline-block;
+            margin-bottom: 1rem;
+            font-weight: 700;
+        }
+
+        .qkv-label.q { background: rgba(255,107,53,0.15); color: var(--accent2); border: 1px solid rgba(255,107,53,0.3); }
+        .qkv-label.k { background: rgba(0,212,255,0.15); color: var(--accent); border: 1px solid rgba(0,212,255,0.3); }
+        .qkv-label.v { background: rgba(168,85,247,0.15); color: var(--accent3); border: 1px solid rgba(168,85,247,0.3); }
+
+        .vector-row {
+            display: flex;
+            gap: 4px;
+            margin-bottom: 6px;
+            align-items: center;
+        }
+
+        .vector-label {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.68rem;
+            color: var(--text-dim);
+            width: 28px;
+            flex-shrink: 0;
+        }
+
+        .vec-cell {
+            height: 18px;
+            border-radius: 3px;
+            flex: 1;
+            transition: all 0.5s ease;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .vec-cell::after {
+            content: '';
+            position: absolute;
+            inset: 0;
+            background: linear-gradient(90deg, transparent, rgba(255,255,255,0.1), transparent);
+            transform: translateX(-100%);
+            transition: transform 0.5s ease;
+        }
+
+        .vec-cell.animate::after {
+            transform: translateX(100%);
+        }
+
+        /* Attention scores */
+        #attention-demo {
+            margin: 1.5rem 0;
+        }
+
+        .query-selector {
+            display: flex;
+            gap: 8px;
+            flex-wrap: wrap;
+            margin-bottom: 1.5rem;
+        }
+
+        .query-btn {
+            background: var(--surface2);
+            border: 1px solid var(--border);
+            color: var(--text-mid);
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.8rem;
+            padding: 8px 14px;
+            border-radius: 6px;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+
+        .query-btn:hover, .query-btn.active {
+            border-color: var(--accent2);
+            color: var(--accent2);
+            background: rgba(255,107,53,0.08);
+            box-shadow: var(--glow2);
+        }
+
+        .attention-label {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.7rem;
+            color: var(--text-dim);
+            letter-spacing: 1px;
+            text-transform: uppercase;
+            margin-bottom: 0.5rem;
+        }
+
+        .attention-bars {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+
+        .attn-bar-row {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .attn-token-label {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.8rem;
+            color: var(--text);
+            width: 80px;
+            flex-shrink: 0;
+            text-align: right;
+        }
+
+        .attn-bar-wrap {
+            flex: 1;
+            background: rgba(255,255,255,0.05);
+            border-radius: 4px;
+            height: 28px;
+            overflow: hidden;
+            position: relative;
+        }
+
+        .attn-bar-fill {
+            height: 100%;
+            border-radius: 4px;
+            display: flex;
+            align-items: center;
+            padding-left: 8px;
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.72rem;
+            font-weight: 600;
+            transition: width 0.8s cubic-bezier(0.4, 0, 0.2, 1);
+            width: 0%;
+        }
+
+        .attn-score {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.75rem;
+            color: var(--text-dim);
+            width: 40px;
+            flex-shrink: 0;
+            text-align: right;
+        }
+
+        /* Heat map */
+        .heatmap-wrap {
+            overflow-x: auto;
+            margin: 1.5rem 0;
+        }
+
+        .heatmap-table {
+            border-collapse: separate;
+            border-spacing: 3px;
+            margin: 0 auto;
+        }
+
+        .heatmap-table th {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.72rem;
+            color: var(--text-dim);
+            padding: 4px 8px;
+            text-align: center;
+            font-weight: 400;
+        }
+
+        .heatmap-table th.row-header {
+            text-align: right;
+            color: var(--accent2);
+        }
+
+        .heatmap-cell {
+            width: 70px;
+            height: 50px;
+            border-radius: 6px;
+            text-align: center;
+            vertical-align: middle;
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.78rem;
+            font-weight: 600;
+            transition: all 0.5s ease;
+            cursor: default;
+            position: relative;
+        }
+
+        .heatmap-cell:hover {
+            transform: scale(1.1);
+            z-index: 10;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.4);
+        }
+
+        /* Formula display */
+        .formula-box {
+            background: rgba(0,212,255,0.04);
+            border: 1px solid rgba(0,212,255,0.15);
+            border-radius: 8px;
+            padding: 1.5rem;
+            text-align: center;
+            margin: 1rem 0;
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.9rem;
+            color: var(--text);
+            letter-spacing: 0.5px;
+        }
+
+        .formula-box .formula-main {
+            font-size: 1.15rem;
+            color: var(--accent);
+            font-weight: 600;
+            display: block;
+            margin-bottom: 0.5rem;
+        }
+
+        .formula-box .formula-sub {
+            font-size: 0.75rem;
+            color: var(--text-dim);
+        }
+
+        /* Step connector */
+        .step-connector {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            margin: 0.5rem 0;
+            color: var(--text-dim);
+            font-size: 1.5rem;
+            line-height: 1;
+        }
+
+        /* Output section */
+        .output-tokens {
+            display: flex;
+            gap: 10px;
+            flex-wrap: wrap;
+            margin: 1.5rem 0;
+            justify-content: center;
+        }
+
+        .output-token {
+            padding: 10px 18px;
+            border-radius: 8px;
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.9rem;
+            font-weight: 600;
+            border: 1px solid;
+            position: relative;
+            overflow: hidden;
+            opacity: 0;
+            transform: translateY(15px);
+            transition: opacity 0.5s, transform 0.5s;
+        }
+
+        .output-token.show {
+            opacity: 1;
+            transform: translateY(0);
+        }
+
+        /* Animation button */
+        .btn {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            background: linear-gradient(135deg, var(--accent), var(--accent3));
+            color: #000;
+            font-family: 'Syne', sans-serif;
+            font-weight: 700;
+            font-size: 0.85rem;
+            padding: 10px 24px;
+            border-radius: 6px;
+            border: none;
+            cursor: pointer;
+            transition: all 0.3s;
+            letter-spacing: 0.5px;
+        }
+
+        .btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 25px rgba(0,212,255,0.3);
+        }
+
+        .btn:active { transform: translateY(0); }
+
+        .btn-row {
+            display: flex;
+            gap: 10px;
+            flex-wrap: wrap;
+            margin-top: 1rem;
+        }
+
+        .btn-outline {
+            background: transparent;
+            border: 1px solid var(--accent);
+            color: var(--accent);
+        }
+
+        .btn-outline:hover {
+            background: rgba(0,212,255,0.08);
+            box-shadow: var(--glow);
+        }
+
+        /* Info chips */
+        .chip-row {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+            margin: 1rem 0;
+        }
+
+        .chip {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.7rem;
+            padding: 4px 12px;
+            border-radius: 20px;
+            letter-spacing: 0.5px;
+        }
+
+        .chip.blue { background: rgba(0,212,255,0.1); color: var(--accent); border: 1px solid rgba(0,212,255,0.25); }
+        .chip.orange { background: rgba(255,107,53,0.1); color: var(--accent2); border: 1px solid rgba(255,107,53,0.25); }
+        .chip.purple { background: rgba(168,85,247,0.1); color: var(--accent3); border: 1px solid rgba(168,85,247,0.25); }
+        .chip.green { background: rgba(16,185,129,0.1); color: var(--green); border: 1px solid rgba(16,185,129,0.25); }
+
+        /* Explanation tabs */
+        .tabs {
+            display: flex;
+            gap: 4px;
+            border-bottom: 1px solid var(--border);
+            margin-bottom: 1.5rem;
+        }
+
+        .tab {
+            padding: 8px 16px;
+            font-size: 0.85rem;
+            font-weight: 600;
+            color: var(--text-dim);
+            cursor: pointer;
+            border-bottom: 2px solid transparent;
+            margin-bottom: -1px;
+            transition: all 0.3s;
+        }
+
+        .tab:hover { color: var(--text); }
+        .tab.active { color: var(--accent); border-bottom-color: var(--accent); }
+
+        .tab-content { display: none; }
+        .tab-content.active { display: block; }
+
+        /* Scrollbar */
+        ::-webkit-scrollbar { width: 6px; height: 6px; }
+        ::-webkit-scrollbar-track { background: var(--surface); }
+        ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+
+        /* Footer */
+        footer {
+            text-align: center;
+            padding: 3rem 0;
+            color: var(--text-dim);
+            font-size: 0.8rem;
+            font-family: 'JetBrains Mono', monospace;
+            border-top: 1px solid var(--border);
+            margin-top: 4rem;
+        }
+
+        /* Inline math */
+        .math {
+            font-family: 'JetBrains Mono', monospace;
+            background: rgba(255,255,255,0.06);
+            padding: 1px 6px;
+            border-radius: 3px;
+            font-size: 0.85em;
+            color: var(--accent);
+        }
+
+        /* Tooltip */
+        [data-tip] {
+            position: relative;
+            cursor: help;
+            border-bottom: 1px dashed rgba(0,212,255,0.4);
+        }
+        [data-tip]:hover::after {
+            content: attr(data-tip);
+            position: absolute;
+            bottom: calc(100% + 6px);
+            left: 50%;
+            transform: translateX(-50%);
+            background: var(--surface2);
+            border: 1px solid var(--border);
+            color: var(--text);
+            font-size: 0.75rem;
+            white-space: nowrap;
+            padding: 5px 10px;
+            border-radius: 4px;
+            z-index: 100;
+            pointer-events: none;
+        }
+
+        /* Animated dot */
+        .live-dot {
+            width: 8px; height: 8px;
+            background: var(--green);
+            border-radius: 50%;
+            display: inline-block;
+            margin-right: 6px;
+            animation: live-blink 1.5s infinite;
+        }
+        @keyframes live-blink {
+            0%,100% { opacity:1; } 50% { opacity:0.3; }
+        }
+
+        /* Context window viz */
+        .context-window {
+            border: 1px solid var(--accent);
+            border-radius: 10px;
+            padding: 1rem;
+            margin: 1rem 0;
+            position: relative;
+            box-shadow: inset 0 0 30px rgba(0,212,255,0.03);
+        }
+
+        .context-window-label {
+            position: absolute;
+            top: -10px;
+            left: 12px;
+            background: var(--bg);
+            padding: 0 8px;
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.65rem;
+            color: var(--accent);
+            letter-spacing: 2px;
+            text-transform: uppercase;
+        }
+
+        .dim-line {
+            height: 1px;
+            background: linear-gradient(90deg, transparent, var(--border), transparent);
+            margin: 1rem 0;
+        }
+
+        @media (max-width: 640px) {
+            .qkv-grid { grid-template-columns: 1fr; }
+            .heatmap-cell { width: 50px; height: 40px; font-size: 0.68rem; }
+            h1 { letter-spacing: -1px; }
+        }
+    </style>
+</head>
+<body>
+
+<div class="container">
+
+    <!-- HEADER -->
+    <header>
+        <h1>The Attention<br>Mechanism</h1>
+        <p class="subtitle">An interactive walkthrough of how transformers learn to focus — using the sentence <em>"I like Natural Language Processing"</em> as our running example.</p>
+        <div class="badge">By M K Pavan Kumar</div>
+    </header>
+
+    <!-- SECTION 0: Intuition -->
+    <div class="section" id="sec0">
+        <div class="section-header">
+            <div class="step-num">0</div>
+            <div class="section-title">The Core Intuition</div>
+        </div>
+        <div class="card">
+            <div class="tabs">
+                <div class="tab active" onclick="switchTab(this,'intuition')">Intuition</div>
+                <div class="tab" onclick="switchTab(this,'problem')">The Problem</div>
+                <div class="tab" onclick="switchTab(this,'solution')">The Solution</div>
+            </div>
+
+            <div class="tab-content active" id="intuition">
+                <p class="prose">When you read the sentence <strong>"I like Natural Language Processing"</strong>, your brain doesn't process each word in isolation. To understand <em>what</em> you like, you automatically connect <strong>"I"</strong> → <strong>"like"</strong> → <strong>"Processing"</strong> (the whole field). Your attention <em>weighs</em> how relevant every other word is to the current word you're interpreting.</p>
+                <p class="prose">Transformers replicate this mechanism mathematically. For each token, it asks: <strong>"How much should I attend to every other token when computing my representation?"</strong></p>
+                <div class="chip-row">
+                    <span class="chip blue">Parallelizable</span>
+                    <span class="chip orange">Context-aware</span>
+                    <span class="chip purple">Long-range dependencies</span>
+                    <span class="chip green">Scales to billions of tokens</span>
+                </div>
+            </div>
+
+            <div class="tab-content" id="problem">
+                <p class="prose">Before attention, RNNs processed sequences <strong>step-by-step</strong>, compressing all context into a fixed-size hidden state. This caused:</p>
+                <ul style="color:var(--text-mid);line-height:2;padding-left:1.2rem;font-size:0.92rem">
+                    <li>Vanishing gradients for long sequences</li>
+                    <li>Information bottleneck — earlier tokens get "forgotten"</li>
+                    <li>Sequential computation — can't be parallelized on GPUs</li>
+                </ul>
+                <p class="prose" style="margin-top:1rem">In <strong>"I like Natural Language Processing"</strong>, an RNN reaching the final token might have already diluted information about <strong>"I"</strong> — the subject of the sentence.</p>
+            </div>
+
+            <div class="tab-content" id="solution">
+                <p class="prose">Attention solves this by allowing <strong>every token to directly attend to every other token</strong> — no bottleneck. Each token gets a <em>weighted mix</em> of all others' information, where the weights are learned dynamically based on content.</p>
+                <div class="formula-box">
+                    <span class="formula-main">Attention(Q, K, V) = softmax( QKᵀ / √dₖ ) · V</span>
+                    <span class="formula-sub">Where Q = Query, K = Key, V = Value, dₖ = key dimension</span>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- SECTION 1: Input tokens -->
+    <div class="section" id="sec1">
+        <div class="section-header">
+            <div class="step-num">1</div>
+            <div class="section-title">Tokenization — Breaking the Sentence</div>
+        </div>
+        <div class="card">
+            <p class="prose">Our sentence is first split into <strong>tokens</strong>. Each token will be embedded into a vector of dimension <span class="math">d_model</span>. For this walkthrough we use <span class="math">d_model = 4</span> for clarity (real models use 512–4096).</p>
+
+            <div class="context-window">
+                <div class="context-window-label">Input Sequence</div>
+                <div class="tokens-row" id="input-tokens">
+                    <div class="token" onclick="selectQueryToken(0)">I<span class="token-idx">pos 0</span></div>
+                    <div class="token" onclick="selectQueryToken(1)">like<span class="token-idx">pos 1</span></div>
+                    <div class="token" onclick="selectQueryToken(2)">Natural<span class="token-idx">pos 2</span></div>
+                    <div class="token" onclick="selectQueryToken(3)">Language<span class="token-idx">pos 3</span></div>
+                    <div class="token" onclick="selectQueryToken(4)">Processing<span class="token-idx">pos 4</span></div>
+                </div>
+            </div>
+
+            <p class="prose">Each token is also given a <strong>positional encoding</strong> — a signal that tells the model <em>where</em> in the sequence the token appears, since the attention operation itself is order-agnostic.</p>
+            <div class="chip-row">
+                <span class="chip blue">5 tokens</span>
+                <span class="chip orange">d_model = 4</span>
+                <span class="chip purple">+ positional encoding</span>
+            </div>
+        </div>
+    </div>
+
+    <!-- SECTION 2: QKV Projections -->
+    <div class="section" id="sec2">
+        <div class="section-header">
+            <div class="step-num">2</div>
+            <div class="section-title">Q, K, V — The Three Projections</div>
+        </div>
+        <div class="card">
+            <p class="prose">Each token's embedding <span class="math">x</span> is linearly projected into <strong>three vectors</strong> using learned weight matrices <span class="math">Wᴼ</span>, <span class="math">Wᴷ</span>, <span class="math">Wᵛ</span>:</p>
+
+            <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:1rem;margin:1rem 0;text-align:center">
+                <div>
+                    <div class="chip orange" style="display:block;margin-bottom:0.5rem">Query (Q)</div>
+                    <p style="font-size:0.78rem;color:var(--text-dim);line-height:1.5">"What am I<br>looking for?"</p>
+                </div>
+                <div>
+                    <div class="chip blue" style="display:block;margin-bottom:0.5rem">Key (K)</div>
+                    <p style="font-size:0.78rem;color:var(--text-dim);line-height:1.5">"What information<br>do I have?"</p>
+                </div>
+                <div>
+                    <div class="chip purple" style="display:block;margin-bottom:0.5rem">Value (V)</div>
+                    <p style="font-size:0.78rem;color:var(--text-dim);line-height:1.5">"What do I<br>actually send?"</p>
+                </div>
+            </div>
+
+            <p class="prose">Think of it like a <data-tip data-tip="A search engine with content-based relevance">database lookup</data-tip>: the Query is your search term, the Keys are the database index labels, and the Values are the actual data stored. You compute similarity of your Query against all Keys to determine how much of each Value to retrieve.</p>
+
+            <div class="btn-row">
+                <button class="btn" onclick="animateQKV()">▶ Animate Projections</button>
+            </div>
+
+            <div class="qkv-grid" id="qkv-grid" style="margin-top:1.5rem">
+                <!-- Q column -->
+                <div class="qkv-col">
+                    <div class="qkv-label q">Q — Query</div>
+                    <div id="q-vecs"></div>
+                </div>
+                <!-- K column -->
+                <div class="qkv-col">
+                    <div class="qkv-label k">K — Key</div>
+                    <div id="k-vecs"></div>
+                </div>
+                <!-- V column -->
+                <div class="qkv-col">
+                    <div class="qkv-label v">V — Value</div>
+                    <div id="v-vecs"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- SECTION 3: Dot-product scores -->
+    <div class="section" id="sec3">
+        <div class="section-header">
+            <div class="step-num">3</div>
+            <div class="section-title">Attention Scores — Q · Kᵀ</div>
+        </div>
+        <div class="card">
+            <p class="prose">For each token acting as a <strong>Query</strong>, we compute a <strong>dot product</strong> with every token's Key. This gives a raw score representing compatibility. We then scale by <span class="math">√dₖ</span> to prevent vanishingly small gradients.</p>
+
+            <div class="formula-box">
+                <span class="formula-main">score(i, j) = Qᵢ · Kⱼ / √dₖ</span>
+                <span class="formula-sub">e.g. score("like", "NLP") = Q_like · K_NLP / √4</span>
+            </div>
+
+            <p class="prose">Select a <strong>Query token</strong> below to see its raw attention scores against all Keys in our sentence:</p>
+
+            <div class="query-selector" id="query-selector">
+                <button class="query-btn active" onclick="showAttention(0, this)">I</button>
+                <button class="query-btn" onclick="showAttention(1, this)">like</button>
+                <button class="query-btn" onclick="showAttention(2, this)">Natural</button>
+                <button class="query-btn" onclick="showAttention(3, this)">Language</button>
+                <button class="query-btn" onclick="showAttention(4, this)">Processing</button>
+            </div>
+
+            <div class="attention-label">Raw Scores (before softmax) — Query: <span id="current-query-label" style="color:var(--accent2)">I</span></div>
+            <div class="attention-bars" id="raw-score-bars"></div>
+        </div>
+    </div>
+
+    <!-- SECTION 4: Softmax -->
+    <div class="section" id="sec4">
+        <div class="section-header">
+            <div class="step-num">4</div>
+            <div class="section-title">Softmax — Normalizing to Probabilities</div>
+        </div>
+        <div class="card">
+            <p class="prose">The raw scores are passed through <strong>softmax</strong>, converting them into a probability distribution (values sum to 1.0). Higher scores → higher attention weights.</p>
+            <div class="formula-box">
+                <span class="formula-main">αᵢⱼ = exp(scoreᵢⱼ) / Σₖ exp(scoreᵢₖ)</span>
+                <span class="formula-sub">Attention weights for token i attending to all tokens j</span>
+            </div>
+            <p class="prose" style="margin-top:1rem">These weights represent <strong>how much each token attends to every other token</strong>. The heatmap below shows the full <span class="math">5×5</span> attention matrix for our sentence:</p>
+
+            <div class="btn-row">
+                <button class="btn" onclick="animateHeatmap()">▶ Reveal Heatmap</button>
+                <button class="btn btn-outline" onclick="resetHeatmap()">↺ Reset</button>
+            </div>
+
+            <div class="heatmap-wrap" style="margin-top:1.5rem">
+                <table class="heatmap-table" id="heatmap"></table>
+            </div>
+
+            <p class="prose" style="margin-top:1rem;font-size:0.82rem">
+                <span style="color:var(--accent)">■</span> High attention &nbsp;&nbsp;
+                <span style="color:var(--text-dim)">■</span> Low attention &nbsp;&nbsp;
+                Rows = Query tokens, Columns = Key tokens
+            </p>
+        </div>
+    </div>
+
+    <!-- SECTION 5: Weighted sum -->
+    <div class="section" id="sec5">
+        <div class="section-header">
+            <div class="step-num">5</div>
+            <div class="section-title">Weighted Value Sum — The Output</div>
+        </div>
+        <div class="card">
+            <p class="prose">Finally, each token's output is a <strong>weighted sum of all Value vectors</strong>, where the weights are the softmax attention scores we just computed:</p>
+            <div class="formula-box">
+                <span class="formula-main">outputᵢ = Σⱼ αᵢⱼ · Vⱼ</span>
+                <span class="formula-sub">Each output is a blend of all Values, weighted by attention</span>
+            </div>
+            <p class="prose">For example, the output for <strong>"like"</strong> will be a mix of all Value vectors, but heavily weighted toward <strong>"Processing"</strong> (high attention) and less toward <strong>"Natural"</strong> — because <em>"like"</em> semantically connects to the thing being liked.</p>
+
+            <div class="btn-row">
+                <button class="btn" onclick="animateOutput()">▶ Show Context-Aware Outputs</button>
+            </div>
+
+            <div class="output-tokens" id="output-tokens" style="margin-top:1.5rem"></div>
+            <div id="output-explanation" style="margin-top:1rem"></div>
+        </div>
+    </div>
+
+    <!-- SECTION 6: Multi-Head -->
+    <div class="section" id="sec6">
+        <div class="section-header">
+            <div class="step-num">6</div>
+            <div class="section-title">Multi-Head Attention</div>
+        </div>
+        <div class="card">
+            <p class="prose">Real transformers run <strong>multiple attention heads in parallel</strong>. Each head learns to focus on different types of relationships — syntax, semantics, coreference, etc. Their outputs are concatenated and projected.</p>
+            <div class="formula-box">
+                <span class="formula-main">MultiHead(Q,K,V) = Concat(head₁,...,headₕ) · Wᴼ</span>
+                <span class="formula-sub">Where headᵢ = Attention(QWᵢᴼ, KWᵢᴷ, VWᵢᵛ)</span>
+            </div>
+
+            <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:1rem;margin:1.5rem 0">
+                <div class="card" style="padding:1rem;background:var(--surface2)">
+                    <div class="chip orange" style="display:inline-block;margin-bottom:0.5rem">Head 1</div>
+                    <p style="font-size:0.78rem;color:var(--text-dim)">Syntactic relations<br>"like → I (subject)"</p>
+                </div>
+                <div class="card" style="padding:1rem;background:var(--surface2)">
+                    <div class="chip blue" style="display:inline-block;margin-bottom:0.5rem">Head 2</div>
+                    <p style="font-size:0.78rem;color:var(--text-dim)">Semantic focus<br>"like → Processing (object)"</p>
+                </div>
+                <div class="card" style="padding:1rem;background:var(--surface2)">
+                    <div class="chip purple" style="display:inline-block;margin-bottom:0.5rem">Head 3</div>
+                    <p style="font-size:0.78rem;color:var(--text-dim)">Compound phrases<br>"Natural → Language → Processing"</p>
+                </div>
+                <div class="card" style="padding:1rem;background:var(--surface2)">
+                    <div class="chip green" style="display:inline-block;margin-bottom:0.5rem">Head N</div>
+                    <p style="font-size:0.78rem;color:var(--text-dim)">Position-sensitive<br>or other patterns...</p>
+                </div>
+            </div>
+
+            <p class="prose">GPT-3 uses <strong>96 heads</strong> with <span class="math">d_model = 12,288</span>. BERT-base uses 12 heads. Each head uses <span class="math">dₖ = d_model / h</span> dimensions, keeping total computation constant.</p>
+        </div>
+    </div>
+
+    <!-- SECTION 7: Full pipeline -->
+    <div class="section" id="sec7">
+        <div class="section-header">
+            <div class="step-num">7</div>
+            <div class="section-title">Full Pipeline Summary</div>
+        </div>
+        <div class="card">
+            <div id="pipeline-viz"></div>
+            <div class="btn-row">
+                <button class="btn" onclick="runFullPipeline()">▶ Run Full Pipeline Animation</button>
+            </div>
+            <div id="pipeline-steps" style="margin-top:1.5rem"></div>
+        </div>
+    </div>
+
+</div>
+
+<footer>
+    <div class="container">
+        <span class="live-dot"></span>
+        Attention Is All You Need — Vaswani et al., 2017 &nbsp;·&nbsp; Interactive explainer
+    </div>
+</footer>
+
+<script>
+    // ===================== DATA =====================
+    const TOKENS = ['I', 'like', 'Natural', 'Language', 'Processing'];
+    const N = TOKENS.length;
+    const DIM = 4;
+
+    // Synthetic but semantically motivated Q, K, V vectors (d=4)
+    const Q = [
+        [0.8,  0.2,  0.1,  0.3],  // I
+        [0.5,  0.9,  0.3,  0.4],  // like
+        [0.3,  0.4,  0.8,  0.6],  // Natural
+        [0.4,  0.5,  0.9,  0.7],  // Language
+        [0.6,  0.7,  0.9,  0.8],  // Processing
+    ];
+    const K = [
+        [0.7,  0.1,  0.2,  0.3],  // I
+        [0.4,  0.8,  0.3,  0.2],  // like
+        [0.2,  0.3,  0.9,  0.5],  // Natural
+        [0.3,  0.4,  0.8,  0.7],  // Language
+        [0.5,  0.6,  0.8,  0.9],  // Processing
+    ];
+    const V = [
+        [0.9,  0.1,  0.2,  0.1],  // I
+        [0.3,  0.8,  0.2,  0.4],  // like
+        [0.2,  0.3,  0.7,  0.5],  // Natural
+        [0.3,  0.4,  0.8,  0.6],  // Language
+        [0.4,  0.5,  0.9,  0.8],  // Processing
+    ];
+
+    // Dot product
+    function dot(a, b) { return a.reduce((s,v,i) => s + v*b[i], 0); }
+
+    // Softmax
+    function softmax(arr) {
+        const max = Math.max(...arr);
+        const exp = arr.map(x => Math.exp(x - max));
+        const sum = exp.reduce((a,b) => a+b, 0);
+        return exp.map(x => x/sum);
+    }
+
+    // Compute raw scores for token i
+    function rawScores(qi) {
+        return K.map(kj => dot(Q[qi], kj) / Math.sqrt(DIM));
+    }
+
+    // Compute full attention matrix
+    function attentionMatrix() {
+        return Q.map((_, i) => softmax(rawScores(i)));
+    }
+
+    const ATTN = attentionMatrix();
+
+    // ===================== COLORS =====================
+    function lerp(a, b, t) { return a + (b-a)*t; }
+    function heatColor(v, min, max) {
+        const t = (v - min) / (max - min + 0.0001);
+        const r = Math.round(lerp(17, 0, t));
+        const g = Math.round(lerp(34, 212, t));
+        const b2 = Math.round(lerp(53, 255, t));
+        return `rgb(${r},${g},${b2})`;
+    }
+
+    function vecColor(v) {
+        const t = Math.max(0, Math.min(1, v));
+        const r = Math.round(lerp(30, 168, t));
+        const g = Math.round(lerp(50, 85, t));
+        const b2 = Math.round(lerp(80, 247, t));
+        return `rgba(${r},${g},${b2},${0.15 + t*0.5})`;
+    }
+
+    // ===================== QKV ANIMATION =====================
+    function buildVecRow(label, vec, colorFn, delay) {
+        const row = document.createElement('div');
+        row.className = 'vector-row';
+        const lbl = document.createElement('div');
+        lbl.className = 'vector-label';
+        lbl.textContent = label;
+        row.appendChild(lbl);
+        vec.forEach((v, ci) => {
+            const cell = document.createElement('div');
+            cell.className = 'vec-cell';
+            cell.style.background = colorFn(v);
+            cell.style.opacity = '0';
+            cell.title = v.toFixed(2);
+            setTimeout(() => {
+                cell.style.opacity = '1';
+                cell.style.transition = 'opacity 0.4s ease, background 0.3s';
+                setTimeout(() => { cell.classList.add('animate'); }, 100);
+            }, delay + ci * 80);
+            row.appendChild(cell);
+        });
+        return row;
+    }
+
+    function animateQKV() {
+        const qC = x => `rgba(255,107,53,${0.1 + x*0.4})`;
+        const kC = x => `rgba(0,212,255,${0.1 + x*0.4})`;
+        const vC = x => `rgba(168,85,247,${0.1 + x*0.4})`;
+
+        ['q-vecs','k-vecs','v-vecs'].forEach(id => document.getElementById(id).innerHTML = '');
+
+        TOKENS.forEach((tok, i) => {
+            const delay = i * 200;
+            document.getElementById('q-vecs').appendChild(buildVecRow(tok, Q[i], qC, delay));
+            document.getElementById('k-vecs').appendChild(buildVecRow(tok, K[i], kC, delay));
+            document.getElementById('v-vecs').appendChild(buildVecRow(tok, V[i], vC, delay));
+        });
+    }
+
+    // Auto-init QKV
+    window.addEventListener('load', () => { setTimeout(animateQKV, 300); });
+
+    // ===================== RAW SCORES + SOFTMAX BARS =====================
+    let currentQuery = 0;
+
+    function showAttention(qi, btn) {
+        currentQuery = qi;
+        document.querySelectorAll('.query-btn').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        document.getElementById('current-query-label').textContent = TOKENS[qi];
+
+        const scores = rawScores(qi);
+        const weights = softmax(scores);
+
+        const container = document.getElementById('raw-score-bars');
+        container.innerHTML = '';
+
+        const maxScore = Math.max(...scores.map(Math.abs));
+
+        scores.forEach((sc, j) => {
+            const row = document.createElement('div');
+            row.className = 'attn-bar-row';
+            row.innerHTML = `
+      <div class="attn-token-label">${TOKENS[j]}</div>
+      <div class="attn-bar-wrap">
+        <div class="attn-bar-fill" id="bar-${j}" style="background:linear-gradient(90deg,rgba(0,212,255,0.5),rgba(168,85,247,0.5));color:var(--text);width:0%">
+          α=${weights[j].toFixed(3)}
+        </div>
+      </div>
+      <div class="attn-score">${sc.toFixed(2)}</div>
+    `;
+            container.appendChild(row);
+
+            setTimeout(() => {
+                document.getElementById(`bar-${j}`).style.width = `${weights[j] * 100}%`;
+            }, 50 + j * 120);
+        });
+    }
+
+    // init
+    setTimeout(() => showAttention(0, document.querySelector('.query-btn')), 600);
+
+    // ===================== HEATMAP =====================
+    function buildHeatmap() {
+        const table = document.getElementById('heatmap');
+        table.innerHTML = '';
+
+        // Header row
+        const thead = document.createElement('tr');
+        thead.innerHTML = '<th></th>';
+        TOKENS.forEach(t => {
+            thead.innerHTML += `<th>${t}</th>`;
+        });
+        table.appendChild(thead);
+
+        // Data rows
+        TOKENS.forEach((rowTok, i) => {
+            const tr = document.createElement('tr');
+            tr.innerHTML = `<th class="row-header">${rowTok}</th>`;
+            TOKENS.forEach((_, j) => {
+                const td = document.createElement('td');
+                td.className = 'heatmap-cell';
+                td.id = `hm-${i}-${j}`;
+                td.style.background = 'var(--surface2)';
+                td.style.color = 'transparent';
+                td.textContent = ATTN[i][j].toFixed(2);
+                td.title = `${rowTok} → ${TOKENS[j]}: ${ATTN[i][j].toFixed(3)}`;
+                tr.appendChild(td);
+            });
+            table.appendChild(tr);
+        });
+    }
+
+    function animateHeatmap() {
+        const allVals = ATTN.flat();
+        const min = Math.min(...allVals);
+        const max = Math.max(...allVals);
+
+        TOKENS.forEach((_, i) => {
+            TOKENS.forEach((_, j) => {
+                const delay = (i * N + j) * 60;
+                setTimeout(() => {
+                    const cell = document.getElementById(`hm-${i}-${j}`);
+                    if (cell) {
+                        cell.style.background = heatColor(ATTN[i][j], min, max);
+                        cell.style.color = ATTN[i][j] > (min + max) * 0.55 ? '#000' : '#fff';
+                        cell.style.transition = 'background 0.4s ease, color 0.3s';
+                    }
+                }, delay);
+            });
+        });
+    }
+
+    function resetHeatmap() {
+        TOKENS.forEach((_, i) => TOKENS.forEach((_, j) => {
+            const cell = document.getElementById(`hm-${i}-${j}`);
+            if (cell) { cell.style.background = 'var(--surface2)'; cell.style.color = 'transparent'; }
+        }));
+    }
+
+    buildHeatmap();
+
+    // ===================== OUTPUT =====================
+    const TOKEN_COLORS = [
+        { bg: 'rgba(255,107,53,0.12)', border: 'rgba(255,107,53,0.5)', text: 'var(--accent2)' },
+        { bg: 'rgba(0,212,255,0.12)',  border: 'rgba(0,212,255,0.5)',  text: 'var(--accent)'  },
+        { bg: 'rgba(168,85,247,0.12)', border: 'rgba(168,85,247,0.5)', text: 'var(--accent3)' },
+        { bg: 'rgba(16,185,129,0.12)', border: 'rgba(16,185,129,0.5)', text: 'var(--green)'   },
+        { bg: 'rgba(245,158,11,0.12)', border: 'rgba(245,158,11,0.5)', text: 'var(--yellow)'  },
+    ];
+
+    const OUTPUT_NOTES = [
+        '"I" — attended heavily to itself and "like" (subject-verb link)',
+        '"like" — highest attention on "Processing" (verb-object), also "I"',
+        '"Natural" — strongly attends to "Language" and "Processing" (compound NLP)',
+        '"Language" — attends to "Natural" and "Processing" (forms compound)',
+        '"Processing" — context from entire sentence; "like" and "Natural Language" most relevant',
+    ];
+
+    function animateOutput() {
+        const container = document.getElementById('output-tokens');
+        const expContainer = document.getElementById('output-explanation');
+        container.innerHTML = '';
+        expContainer.innerHTML = '';
+
+        TOKENS.forEach((tok, i) => {
+            const el = document.createElement('div');
+            el.className = 'output-token';
+            el.style.background = TOKEN_COLORS[i].bg;
+            el.style.borderColor = TOKEN_COLORS[i].border;
+            el.style.color = TOKEN_COLORS[i].text;
+
+            // Top attended token
+            const topJ = ATTN[i].indexOf(Math.max(...ATTN[i]));
+            el.innerHTML = `${tok}<br><span style="font-size:0.65rem;opacity:0.7;font-family:'JetBrains Mono',monospace">→ attends to "${TOKENS[topJ]}"</span>`;
+            container.appendChild(el);
+
+            setTimeout(() => el.classList.add('show'), 200 + i * 200);
+        });
+
+        setTimeout(() => {
+            const div = document.createElement('div');
+            div.className = 'card';
+            div.style.background = 'var(--surface2)';
+            div.style.marginTop = '0';
+            div.innerHTML = '<div style="margin-bottom:0.5rem;font-size:0.78rem;color:var(--text-dim);font-family:\'JetBrains Mono\',monospace;letter-spacing:1px;text-transform:uppercase">Context-aware representations</div>';
+            OUTPUT_NOTES.forEach((note, i) => {
+                const p = document.createElement('p');
+                p.style.cssText = `font-size:0.82rem;color:var(--text-mid);padding:6px 0;border-bottom:1px solid var(--border);line-height:1.5`;
+                p.innerHTML = `<span style="color:${TOKEN_COLORS[i].text};font-family:'JetBrains Mono',monospace;font-weight:600">${TOKENS[i]}</span> — ${note.split('—')[1]}`;
+                div.appendChild(p);
+            });
+            expContainer.appendChild(div);
+        }, 1500);
+    }
+
+    // ===================== FULL PIPELINE =====================
+    const PIPELINE_STEPS = [
+        { label: 'Input Tokens', detail: '"I like Natural Language Processing" → 5 tokens', color: 'var(--text)' },
+        { label: 'Embedding + Positional Encoding', detail: 'Each token → d-dim vector + position signal', color: 'var(--green)' },
+        { label: 'Linear Projections → Q, K, V', detail: 'Three weight matrices create Query, Key, Value', color: 'var(--yellow)' },
+        { label: 'Scaled Dot-Product: QKᵀ/√dₖ', detail: 'Compute compatibility scores between all token pairs', color: 'var(--accent2)' },
+        { label: 'Softmax → Attention Weights', detail: 'Normalize scores to probabilities (rows sum to 1)', color: 'var(--accent)' },
+        { label: 'Weighted Sum of Values', detail: 'Output = Σ αᵢⱼ · Vⱼ for each token', color: 'var(--accent3)' },
+        { label: 'Context-Aware Representations', detail: 'Each token now encodes meaning in context of all others', color: 'var(--green)' },
+    ];
+
+    function runFullPipeline() {
+        const container = document.getElementById('pipeline-steps');
+        container.innerHTML = '';
+
+        PIPELINE_STEPS.forEach((step, i) => {
+            const el = document.createElement('div');
+            el.style.cssText = `
+      display:flex; align-items:flex-start; gap:1rem; padding:0.9rem 1rem;
+      border-left:2px solid var(--border); margin-left:1rem;
+      opacity:0; transition: opacity 0.4s, transform 0.4s;
+      transform:translateX(-15px); margin-bottom:4px;
+    `;
+
+            const dot2 = document.createElement('div');
+            dot2.style.cssText = `
+      width:10px;height:10px;border-radius:50%;background:${step.color};
+      flex-shrink:0;margin-top:4px;margin-left:-6px;
+      box-shadow:0 0 8px ${step.color};
+    `;
+
+            const text = document.createElement('div');
+            text.innerHTML = `
+      <div style="font-weight:700;font-size:0.9rem;color:${step.color}">${step.label}</div>
+      <div style="font-size:0.78rem;color:var(--text-dim);margin-top:2px;font-family:'JetBrains Mono',monospace">${step.detail}</div>
+    `;
+
+            el.appendChild(dot2);
+            el.appendChild(text);
+            container.appendChild(el);
+
+            setTimeout(() => {
+                el.style.opacity = '1';
+                el.style.transform = 'translateX(0)';
+            }, 300 + i * 350);
+        });
+    }
+
+    // ===================== TABS =====================
+    function switchTab(el, id) {
+        el.closest('.card').querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+        el.closest('.card').querySelectorAll('.tab-content').forEach(t => t.classList.remove('active'));
+        el.classList.add('active');
+        document.getElementById(id).classList.add('active');
+    }
+
+    // ===================== TOKEN CLICK =====================
+    function selectQueryToken(i) {
+        document.querySelectorAll('#input-tokens .token').forEach((t,j) => {
+            t.classList.toggle('query-token', j === i);
+        });
+        const btn = document.querySelectorAll('.query-btn')[i];
+        showAttention(i, btn);
+        document.getElementById('sec3').scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }
+
+    // ===================== SCROLL REVEAL =====================
+    const observer = new IntersectionObserver((entries) => {
+        entries.forEach(e => { if (e.isIntersecting) e.target.classList.add('visible'); });
+    }, { threshold: 0.08 });
+
+    document.querySelectorAll('.section').forEach(s => observer.observe(s));
+</script>
+</body>
+</html>
